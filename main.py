@@ -18,7 +18,7 @@ def main():
     # best = drawButton(win, 'Best', 'yellow')
     # reset = drawButton(win, 'Reset', 'green')
     # quit = drawButton(win, 'Quit', 'red')
-    tiles = drawGrid(win, 0.5, [100, 100, 100, 100, 3, 3])
+    tiles = reset(win)
 
     while 1:
         isClicked = getClickFunction(win.getMouse())
@@ -51,9 +51,41 @@ def move(lines):
 
 
 def reset(win, tiles=[]):
+
+    def define(dimensions):
+
+        [
+            left,
+            down,
+            width,
+            height,
+            squaresAcross,
+            squaresDown,
+        ] = dimensions
+
+        tiles = []
+        for i in range(squaresAcross):
+            for j in range(squaresDown):
+                point1 = Point(left + width * i, down + height * j)
+                point2 = Point(left + width * (i+1), down + height * (j+1))
+                square = Rectangle(point1, point2)
+                point3 = Point(left + width * (i + 1/2), down + height * (j + 1/2))
+                number = Text(point3, '')
+                tiles.append({
+                    square: square,
+                    number: number,
+                })
+
+        return tiles
+
+    def populate(tiles, difficulty):
+        numberOfTwos = ++int(len(tiles) * difficulty)
+
+    def draw(win, tiles):
+        square.draw(win)
+
     map(lambda tile: tile.clear(), tiles)
-    return drawGrid(win, 0.5, [100, 100, 100, 100, 5, 5])
-    print('Resetting the game')
+    return draw(win populate(0.5, define([50, 50, 50, 50, 3, 3])))
 
 
 def drawButton(win, label):
@@ -63,35 +95,6 @@ def drawButton(win, label):
     text = Text(label)
     text.draw(win)
     return button
-
-
-def drawGrid(win, difficulty, dimensions):
-    [
-        left,
-        down,
-        width,
-        height,
-        squaresAcross,
-        squaresDown,
-    ] = dimensions
-
-    tiles = []
-    for i in range(0, squaresAcross):
-        for j in range(0, squaresDown):
-            point1 = Point(left + width * i, down + height * j)
-            point2 = Point(left + width * (i+1), down + height * (j+1))
-            square = Rectangle(point1, point2)
-            square.draw(win)
-
-            point3 = Point(left + width * (i + 1/2), down + height * (j + 1/2))
-            number = Text(point3, '2')
-            number.draw(win)
-            tiles.append({
-                square: square,
-                number: number,
-            })
-    return tiles
-
 
 def getClickFunction(point):
     def isClicked(button):
