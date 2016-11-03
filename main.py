@@ -79,18 +79,12 @@ def move(lines, score, state):
 
         def slide(line):
             for i in range(len(line) - 1):
-                first = line[i]['number']
-                second = line[i+1]['number']
-                if (first.getText() == '' and second.getText() != ''):
-                    first.setText(second.getText())
-                    second.setText('')
-            for i in range(len(line) - 1):
                 for j in range(i + 1, len(line)):
                     first = line[i]['number']
                     other = line[j]['number']
-                    if (first.getText() == '' and second.getText() != ''):
+                    if (first.getText() == '' and other.getText() != ''):
                         first.setText(other.getText())
-                        second.setText('')
+                        other.setText('')
             return line
 
         def combine(line):
