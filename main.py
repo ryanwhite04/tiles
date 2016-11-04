@@ -6,6 +6,8 @@ from graphics import GraphWin, Point, Rectangle, Text
 from random import random
 
 
+# Density is the ratio of tiles which start with a two
+# Padding is the spacing around ui components
 def main(title='Tile Game', padding=10, density=0.5, dimensions={
     'x': 120,      # Pixels left to grid
     'y': 10,       # Pixels down to grid
@@ -15,92 +17,72 @@ def main(title='Tile Game', padding=10, density=0.5, dimensions={
     'down': 5      # Tiles down, min 3
 }):
 
+    # These are used to construct the board
     x = dimensions['x']
     y = dimensions['y']
     width = padding + x + dimensions['across'] * dimensions['width']
     height = padding + y + dimensions['down'] * dimensions['height']
+
+    # The window is made just big enough to fit all components
     win = GraphWin(title, width, height)
-    grid = Grid(dimensions).populate(density)
+
+    # The squares for the game
+    grid = Grid(dimensions).fill(density)
+
+    # Labels which show the score and state of the game
     labels = {
         'score': Text(Point(x/2, 110), '0'),
-        'state': Text(Point(x/2, 130), 'New Game')
+        'state': Text(Point(x/2, 130), 'Hey There')
     }
 
-    # Returns the direction of the best move
-    # kinda subjective
-    def best():
-        return 'left'
-
-    # Reset the gameboard including the grid, score, and state
-    def reset():
-        print('reset')
-        labels['score'].setText('0')
-        labels['state'].setText('New Game')
-        grid.reset(win, density, dimensions)
-        return True
-
-    win.bind("<Button-1>", click(win, grid, labels, [
+    # The best, reset and exit buttons
+    buttons = [
         Button('Best', 'yellow', {
             'x': [padding, x - padding],
             'y': [10, 30]
-        }, best),
+        }, best(grid, labels)),
         Button('Reset', 'green', {
             'x': [padding, x - padding],
             'y': [40, 60]
-        }, reset),
+        }, reset(win, grid, labels, density, dimensions)),
         Button('Exit', 'red', {
             'x': [padding, x - padding],
             'y': [70, 90]
         }, exit)
-    ]))
-    win.mainloop()
+    ]
+
+    # Bind mouse event handler to window
+    win.bind("<Button-1>", click(win, grid, labels, buttons))
+
+    # Bind keyboard press event handler to window
+    # This is so the player can move using the directional keys
+    win.bind("<Key>", key(move(grid, labels)))
+
+    # Don't quit on me!
+    draw(win, grid, labels, buttons).mainloop()
 
 
-# Logs when mouse clicked, alternative to win.getMouse() and while loop
-def click(win, grid, labels, buttons):
-
-    def move(direction):
-        score = int(labels['score'].getText())
-        if grid.move(direction):
-            labels['score'].setText(str(score + 1))
-            labels['state'].setText('Nice Move')
-        else:
-            labels['score'].setText(str(score - 1))
-            labels['state'].setText('Try Again')
-
-    # Logs when a key is pressed, for diretional controls
-    def key(grid):
-        def callback(event):
-            keys = {
-                '\uf700': 'up',
-                '\uf701': 'down',
-                '\uf702': 'left',
-                '\uf703': 'right'
-            }
-            if event.char in keys:
-                move(keys[event.char])
-        return callback
-
-    win.bind("<Key>", key(grid))
-
-    # Draw everything
+# Draw all the components
+def draw(win, grid, labels, buttons):
     grid.draw(win)
     labels['score'].draw(win)
     labels['state'].draw(win)
     [b.draw(win) for b in buttons]
+    return win
 
-    # Main event loop
-    def callback(event):
 
-        # Return a function that returns true is passed an object containing
-        # coordinates of the point
-        def getClickFunction(x, y):
-            def isClicked(button):
-                p1 = button.getP1()
-                p2 = button.getP2()
-                return (p1.x <= x <= p2.x and p1.y <= y <= p2.y)
-            return isClicked
+# Reset the gameboard including the grid, score, and state
+def reset(win, grid, labels, density, dimensions):
+    def partial():
+        labels['score'].setText('0')
+        labels['state'].setText('New Game')
+        grid.reset(win, density, dimensions)
+    return partial
 
+
+# Logs when mouse clicked, alternative to win.getMouse() and while loop
+def click(win, grid, labels, buttons):
+    def partial(event):
         isClicked = getClickFunction(event.x, event.y)
         clickedTiles = [
             tile.direction
@@ -111,15 +93,90 @@ def click(win, grid, labels, buttons):
             move(clickedTiles[0])
         [b.callback() for b in buttons if isClicked(b.area)]
         win.focus_set()
-    return callback
+    return partial
+
+
+# Perform the best move
+def best(grid, labels):
+    def partial():
+        score = int(labels['score'].getText())
+        if grid.best():
+            labels['score'].setText(str(score + 1))
+            labels['state'].setText('Nice Move')
+        else:
+            labels['score'].setText(str(score - 1))
+            labels['state'].setText('Try Again')
+        if grid.over():
+            labels['state'].setText('Game Over')
+    return partial
+
+
+def move(grid, labels):
+    def partial(direction):
+        score = int(labels['score'].getText())
+        view = grid.views[['up', 'down', 'left', 'right'].index(direction)]
+        if grid.move(view):
+            labels['score'].setText(str(score + 1))
+            labels['state'].setText('Nice Move')
+        else:
+            labels['score'].setText(str(score - 1))
+            labels['state'].setText('Try Again')
+        if grid.over():
+            labels['state'].setText('Game Over')
+    return partial
+
+
+# Logs when a key is pressed, for diretional controls
+def key(move):
+    def partial(event):
+        keys = {
+            '\uf700': 'up',
+            '\uf701': 'down',
+            '\uf702': 'left',
+            '\uf703': 'right'
+        }
+        if event.char in keys:
+            move(keys[event.char])
+    return partial
+
+
+# Return a function that returns true is passed an object containing
+# coordinates of the point
+def getClickFunction(x, y):
+    def partial(button):
+        p1 = button.getP1()
+        p2 = button.getP2()
+        return (p1.x <= x <= p2.x and p1.y <= y <= p2.y)
+    return partial
 
 
 class Grid:
 
     def __init__(self, dimensions):
+
+        # Alter the order of the lines so that the same move can be performed
+        # for instance, a down move is really just an up move when all the
+        # tiles are placed in reverse order in their respective lines and the
+        # line order is reversed
+        def order(direction, unordered):
+            lines = [line.tiles for line in unordered]
+            if direction == 'left' or direction == 'right':
+                # Rotate the grid clockwise 90 degrees
+                lines = [list(i) for i in zip(*lines[::-1])]
+            if direction == 'down' or direction == 'left':
+                # Reverse the grid
+                lines = [line[::-1] for line in lines[::-1]]
+
+            return [Line().update(line) for line in lines]
+
         across = dimensions['across']
         self.lines = [Line(dimensions, i) for i in range(across)]
         self.tiles = [j for i in self.lines for j in i.tiles]
+        self.views = [
+            order(direction, self.lines)
+            for direction
+            in ['up', 'down', 'left', 'right']
+        ]
 
     def draw(self, win):
         [line.draw(win) for line in self.lines]
@@ -130,7 +187,7 @@ class Grid:
         return self
 
     # Fill the grid with a number of twos corresponding to the density
-    def populate(self, density):
+    def fill(self, density):
 
         def getPosition(i):
             return positions.pop(int(len(positions) * random()))
@@ -150,39 +207,35 @@ class Grid:
         self.clear()
         self.lines = [Line(dimensions, i) for i in range(across)]
         self.tiles = [j for i in self.lines for j in i.tiles]
-        return self.populate(density).draw(win)
+        return self.fill(density).draw(win)
 
     # Shift the lines according to the rules of the gameboard
     # a line is a list of tiles along a common axis
-    def move(self, direction):
-
-        # Alter the order of the lines so that the same move can be performed
-        # for instance, a down move is really just an up move when all the
-        # tiles are placed in reverse order in their respective lines and the
-        # line order is reversed
-        def order(direction, unordered):
-            lines = [line.tiles for line in unordered]
-            if direction == 'left' or direction == 'right':
-                # Rotate the grid clockwise 90 degrees
-                lines = [list(i) for i in zip(*lines[::-1])]
-            if direction == 'down' or direction == 'left':
-                # Reverse the grid
-                lines = [line[::-1] for line in lines[::-1]]
-
-            return [Line().update(line) for line in lines]
+    def move(self, view):
 
         def placeTwo(lines):
             lines[-1].tiles[-1].update(2)
             return lines
 
-        lines = order(direction, self.lines)
-        if all([line.canShift() for line in lines]):
-            placeTwo([line.shift() for line in lines])
-            return True
-        else:
-            return False
+        return self.able(view) and placeTwo([line.shift() for line in view])
+
+    # Returns the direction of the best move
+    # kinda subjective
+    def best(self):
+        move = self.move
+        able = self.able
+        return next((move(view) for view in self.views if able(view)), False)
+
+    # Return true if the game is over
+    def over(self):
+        return not any([self.able(view) for view in self.views])
+
+    # Check if all the lines in a view can be shifted
+    def able(self, view):
+        return all([line.canShift() for line in view])
 
 
+# A group of tiles which can be shifted and arranged according to their order
 class Line:
 
     def __init__(self, dimensions=None, i=None):
@@ -253,6 +306,7 @@ class Line:
         return self
 
 
+# A square and a number with an associated value
 class Tile:
 
     def __init__(self, dimensions, i, j):
