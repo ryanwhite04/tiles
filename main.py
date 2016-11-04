@@ -1,260 +1,335 @@
+# CITS1401 Assignment
+# Ryan White 20528376 and Ziggy O'Reilly
+# https://github.com/RyanWhite04/tiles
+
 from graphics import GraphWin, Point, Rectangle, Text
 from random import random
 
 
-def main():
+def main(title='Tile Game', padding=10, density=0.5, dimensions={
+    'x': 120,      # Pixels left to grid
+    'y': 10,       # Pixels down to grid
+    'width': 45,   # Width of tile
+    'height': 45,  # Height of tile
+    'across': 5,   # Tiles across, min 3
+    'down': 5      # Tiles down, min 3
+}):
 
-    def key(event):
-        print("pressed", repr(event.char))
+    x = dimensions['x']
+    y = dimensions['y']
+    width = padding + x + dimensions['across'] * dimensions['width']
+    height = padding + y + dimensions['down'] * dimensions['height']
+    win = GraphWin(title, width, height)
+    grid = Grid(dimensions).populate(density)
+    labels = {
+        'score': Text(Point(x/2, 110), '0'),
+        'state': Text(Point(x/2, 130), 'New Game')
+    }
 
-    def click(win):
-        def callback(event):
-            win.focus_set()
-            print("clicked at", event.x, event.y)
+    # Returns the direction of the best move
+    # kinda subjective
+    def best():
+        return 'left'
 
-    win = GraphWin("Tile Game", 600, 600)
+    # Reset the gameboard including the grid, score, and state
+    def reset():
+        print('reset')
+        labels['score'].setText('0')
+        labels['state'].setText('New Game')
+        grid.reset(win, density, dimensions)
+        return True
 
-    win.bind("<Button-1>", click(win))
-    win.bind("<Key>", key)
+    win.bind("<Button-1>", click(win, grid, labels, [
+        Button('Best', 'yellow', {
+            'x': [padding, x - padding],
+            'y': [10, 30]
+        }, best),
+        Button('Reset', 'green', {
+            'x': [padding, x - padding],
+            'y': [40, 60]
+        }, reset),
+        Button('Exit', 'red', {
+            'x': [padding, x - padding],
+            'y': [70, 90]
+        }, exit)
+    ]))
+    win.mainloop()
 
-    best = drawButton(win, 'Best', 'yellow', [10, 10, 110, 30])
-    resetButton = drawButton(win, 'Reset', 'green', [10, 40, 110, 60])
-    quit = drawButton(win, 'Quit', 'red', [10, 70, 110, 90])
 
-    # map(lambda shape: shape.draw(win), [best, reset, quit])
+# Logs when mouse clicked, alternative to win.getMouse() and while loop
+def click(win, grid, labels, buttons):
 
-    score = Text(Point(60, 110), '')
-    score.draw(win)
-
-    state = Text(Point(60, 130), '')
-    state.draw(win)
-
-    lines = reset(win, score, state, 0.5)
-
-    while 1:
-        isClicked = getClickFunction(win.getMouse())
-
-        def check(tile):
-            if (isClicked(tile['square'])):
-                return tile['direction']
-            else:
-                return False
-        clickedTiles = list(filter(check, [j for i in lines for j in i]))
-        if (clickedTiles and clickedTiles[0]['direction']):
-            move(order(clickedTiles[0]['direction'], lines), score, state)
-        if isClicked(best):
-            # Perform the best move
-            move(order(best(), lines), score, state)
-        elif isClicked(resetButton):
-            # Start was clicked
-            lines = reset(win, score, state, 0.5, lines)
-        elif isClicked(quit):
-            # Quit was clicked
-            win.close()
-            break
+    def move(direction):
+        score = int(labels['score'].getText())
+        if grid.move(direction):
+            labels['score'].setText(str(score + 1))
+            labels['state'].setText('Nice Move')
         else:
-            print('No Button was clicked')
+            labels['score'].setText(str(score - 1))
+            labels['state'].setText('Try Again')
+
+    # Logs when a key is pressed, for diretional controls
+    def key(grid):
+        def callback(event):
+            keys = {
+                '\uf700': 'up',
+                '\uf701': 'down',
+                '\uf702': 'left',
+                '\uf703': 'right'
+            }
+            if event.char in keys:
+                move(keys[event.char])
+        return callback
+
+    win.bind("<Key>", key(grid))
+
+    # Draw everything
+    grid.draw(win)
+    labels['score'].draw(win)
+    labels['state'].draw(win)
+    [b.draw(win) for b in buttons]
+
+    # Main event loop
+    def callback(event):
+
+        # Return a function that returns true is passed an object containing
+        # coordinates of the point
+        def getClickFunction(x, y):
+            def isClicked(button):
+                p1 = button.getP1()
+                p2 = button.getP2()
+                return (p1.x <= x <= p2.x and p1.y <= y <= p2.y)
+            return isClicked
+
+        isClicked = getClickFunction(event.x, event.y)
+        clickedTiles = [
+            tile.direction
+            for tile in grid.tiles
+            if isClicked(tile.area)
+        ]
+        if (clickedTiles and clickedTiles[0]):
+            move(clickedTiles[0])
+        [b.callback() for b in buttons if isClicked(b.area)]
+        win.focus_set()
+    return callback
 
 
-# Alter the order of the lines so that the same move can be performed
-# for instance, a down move is really just an up move when all the tiles are
-# placed in reverse order in their respective lines and the line order is
-# reversed
-def order(direction, lines):
-    if direction == 'left' or direction == 'right':
-        # Rotate the grid clockwise 90 degrees
-        lines = list(map(list, zip(*lines[::-1])))
-    if direction == 'down' or direction == 'left':
-        # Reverse the grid
-        lines = list(map(lambda line: line[::-1], lines[::-1]))
-    return lines
+class Grid:
+
+    def __init__(self, dimensions):
+        across = dimensions['across']
+        self.lines = [Line(dimensions, i) for i in range(across)]
+        self.tiles = [j for i in self.lines for j in i.tiles]
+
+    def draw(self, win):
+        [line.draw(win) for line in self.lines]
+        return self
+
+    def clear(self):
+        [line.clear() for line in self.lines]
+        return self
+
+    # Fill the grid with a number of twos corresponding to the density
+    def populate(self, density):
+
+        def getPosition(i):
+            return positions.pop(int(len(positions) * random()))
+
+        tiles = self.tiles
+
+        [tile.update(0) for tile in tiles]
+        positions = list(range(len(tiles)))
+        # Returns an array of the positions in tiles which should start as two
+        numbers = list(range(++int(len(tiles) * density)))
+        twos = [getPosition(i) for i in numbers]
+        [tiles[i].update(2) for i in twos]
+        return self
+
+    def reset(self, win, density, dimensions):
+        across = dimensions['across']
+        self.clear()
+        self.lines = [Line(dimensions, i) for i in range(across)]
+        self.tiles = [j for i in self.lines for j in i.tiles]
+        return self.populate(density).draw(win)
+
+    # Shift the lines according to the rules of the gameboard
+    # a line is a list of tiles along a common axis
+    def move(self, direction):
+
+        # Alter the order of the lines so that the same move can be performed
+        # for instance, a down move is really just an up move when all the
+        # tiles are placed in reverse order in their respective lines and the
+        # line order is reversed
+        def order(direction, unordered):
+            lines = [line.tiles for line in unordered]
+            if direction == 'left' or direction == 'right':
+                # Rotate the grid clockwise 90 degrees
+                lines = [list(i) for i in zip(*lines[::-1])]
+            if direction == 'down' or direction == 'left':
+                # Reverse the grid
+                lines = [line[::-1] for line in lines[::-1]]
+
+            return [Line().update(line) for line in lines]
+
+        def placeTwo(lines):
+            lines[-1].tiles[-1].update(2)
+            return lines
+
+        lines = order(direction, self.lines)
+        if all([line.canShift() for line in lines]):
+            placeTwo([line.shift() for line in lines])
+            return True
+        else:
+            return False
 
 
-# Shift the lines according to the rules of the gameboard
-# a line is a list of tiles along a common axis
-def move(lines, score, state):
+class Line:
+
+    def __init__(self, dimensions=None, i=None):
+        if dimensions:
+            down = dimensions['down']
+            self.tiles = [Tile(dimensions, i, j) for j in range(down)]
+
+    def draw(self, win):
+        [tile.draw(win) for tile in self.tiles]
+        return self
+
+    def clear(self):
+        [tile.clear() for tile in self.tiles]
+        return self
 
     # Shift a line of tiles
-    def shift(line):
-
-        def slide(line):
-            for i in range(len(line) - 1):
-                for j in range(i + 1, len(line)):
-                    first = line[i]['number']
-                    other = line[j]['number']
-                    if (first.getText() == '' and other.getText() != ''):
-                        first.setText(other.getText())
-                        other.setText('')
-            return line
-
-        def combine(line):
-            for i in range(len(line) - 1):
-                first = line[i]['number']
-                second = line[i+1]['number']
-                if (first.getText() == second.getText() != ''):
-                    first.setText(str(2 * int(second.getText())))
-                    second.setText('')
-            return line
-
-        slide(combine(slide(line)))  # Because not recursive
+    def shift(self):
+        self.slide().combine().slide()  # Because not recursive
         # A tile can only participate in one combination during any given move
-        return line
+        return self
 
-    def placeTwo(lines):
-        lines[-1][-1]['number'].setText('2')
-        return lines
+    def slide(self):
+        tiles = self.tiles
 
-    def canShift(line):
+        for i in range(len(tiles) - 1):
+            for j in range(i + 1, len(tiles)):
+                first = tiles[i]
+                second = tiles[j]
+                if (not first.value and second.value):
+                    first.update(second.value)
+                    second.update(0)
+        return self
 
-        # Return true if the line has at least 1 empty square before a
-        # non-empty square
-        def hasEmptyBeforeNonEmpty(line):
-            for i in range(len(line) - 1):
-                for j in range(i + 1, len(line)):
-                    first = line[i]['number'].getText()
-                    other = line[j]['number'].getText()
-                    if (first == '' and other != ''):
-                        return True
-            return False
+    def combine(self):
+        tiles = self.tiles
+        for i in range(len(tiles) - 1):
+            first = tiles[i]
+            second = tiles[i+1]
+            if (first.value == second.value and first.value > 0):
+                first.double()
+                second.update(0)
+        return self
 
-        # Return true if there is at least 1 pair of consecutive squares with
-        # the same number
-        def hasPair(line):
-            for i in range(len(line) - 1):
-                first = line[i]['number'].getText()
-                second = line[i + 1]['number'].getText()
-                if (first == second and second != ''):
+    def canShift(self):
+        return self.hasEmptyBeforeNonEmpty() or self.hasPair()
+
+    # Return true if the line has at least 1 empty square before a
+    # non-empty square
+    def hasEmptyBeforeNonEmpty(self):
+        tiles = self.tiles
+        for i in range(len(tiles) - 1):
+            for j in range(i + 1, len(tiles)):
+                if (not tiles[i].value and tiles[j].value):
                     return True
-            return False
-        empty = hasEmptyBeforeNonEmpty(line)
-        pair = hasPair(line)
-        print(empty, pair)
-        return hasEmptyBeforeNonEmpty(line) or hasPair(line)
-
-    if all(map(canShift, lines)):
-        placeTwo(list(map(shift, lines)))
-        score.setText(str(int(score.getText()) + 1))
-        state.setText('Nice Move')
-    else:
-        score.setText(str(int(score.getText()) - 1))
-        state.setText('Try Again')
-    return lines
-
-
-# Returns the directions of the best move
-# kinda subjective
-def best(lines):
-    # TODO
-    return 'left'
-
-
-# Reset the gameboard including the grid, score, and state
-def reset(win, score, state, difficulty, lines=[]):
-
-    def draw(win, lines):
-        for line in lines:
-            for tile in line:
-                tile['square'].draw(win)
-                tile['number'].draw(win)
-        return lines
-
-    def clear(lines):
-        for line in lines:
-            for tile in line:
-                tile['square'].undraw()
-                tile['number'].undraw()
-        return lines
-
-    score.setText('0')
-    state.setText('New Game')
-    clear(lines)
-    lines = draw(win, populate(difficulty, getGrid(120, 10, 50, 50, 3, 3)))
-
-    return lines
-
-
-# Create a grid of squares according to the arguments
-def getGrid(x, y, width, height, across, down):
-    # Returns a list of tiles
-    def getLine(i):
-        # Returns a tile
-        def getTile(j):
-            number = Text(Point(x+width*(i+1/2), y+height*(j+1/2)), '')
-            return {
-                'square': Rectangle(
-                    Point(x + width * i, y + height * j),
-                    Point(x + width * (i+1), y + height * (j+1))),
-                'number': number,
-                'direction': assign(i, j, across, down)
-            }
-        return list(map(getTile, list(range(down))))
-    return list(map(getLine, list(range(across))))
-
-
-# Fill the grid with a number of twos corresponding to the difficulty
-def populate(difficulty, lines):
-
-    # This just flattens the 2d array to make it easier to work with
-    # This would make a nice exam question
-    tiles = [j for i in lines for j in i]
-    positions = list(range(len(tiles)))
-
-    def getPosition(i):
-        return positions.pop(int(len(positions) * random()))
-
-    # Returns an array of the positions in tiles which should start as two
-    twos = map(getPosition, list(range(++int(len(tiles) * difficulty))))
-    list(map(lambda i: tiles[i]['number'].setText('2'), list(twos)))
-
-    # return the 2d list, we don't need the 1d list of tiles anymore
-    return lines
-
-
-# Given the coordinates in the grid, assign a direction for a move to perform
-# This could be simpler, TODO
-def assign(i, j, across, down):
-    if (i == 0 and j != 0 and j != (down - 1)):
-        return 'left'
-    elif (i == (across - 1) and j != 0 and j != (down - 1)):
-        return 'right'
-    elif (j == 0 and i != 0 and i != (across - 1)):
-        return 'up'
-    elif (j == (down - 1) and i != 0 and i != (across - 1)):
-        return 'down'
-    else:
         return False
 
+    # Return true if there is at least 1 pair of consecutive squares with
+    # the same number
+    def hasPair(self):
+        tiles = self.tiles
+        for i in range(len(tiles) - 1):
+            if (tiles[i].value == tiles[i + 1].value and tiles[i].value):
+                return True
+        return False
 
-# Draw a button given the following arguments
-def drawButton(win, label, color, coordinates):
-    [x1, y1, x2, y2] = coordinates
-    button = Rectangle(Point(x1, y1), Point(x2, y2))
-    button.setFill(color)
-    button.draw(win)
-
-    text = Text(Point((x1 + x2)/2, (y1 + y2)/2), label)
-    text.draw(win)
-
-    return button
+    def update(self, tiles):
+        self.tiles = tiles
+        return self
 
 
-# Return a function that returns true is passed an object containing the
-# coordinates of the point
-def getClickFunction(point):
-    def isClicked(button):
-        p1 = button.getP1()
-        p2 = button.getP2()
-        return (p1.x <= point.x <= p2.x and p1.y <= point.y <= p2.y)
-    return isClicked
+class Tile:
+
+    def __init__(self, dimensions, i, j):
+
+        x = dimensions['x']
+        y = dimensions['y']
+        width = dimensions['width']
+        height = dimensions['height']
+        across = dimensions['across']
+        down = dimensions['down']
+
+        self.area = Rectangle(
+            Point(x + width * i, y + height * j),
+            Point(x + width * (i+1), y + height * (j+1)))
+        self.text = Text(Point(x+width*(i+1/2), y+height*(j+1/2)), '')
+        self.value = 0
+        self.assign(i, j, across, down)
+
+    def draw(self, win):
+        self.area.draw(win)
+        self.text.draw(win)
+        return self
+
+    def clear(self):
+        self.area.undraw()
+        self.text.undraw()
+        return self
+
+    def update(self, number):
+        self.value = number
+        if number > 0:
+            self.text.setText(str(number))
+        else:
+            self.text.setText('')
+        return self
+
+    def double(self):
+        self.update(2 * self.value)
+        return self
+
+    # Given the coordinates in the grid, assign direction for a move to perform
+    # This could be simpler, TODO
+    def assign(self, i, j, across, down):
+        if (i == 0 and j != 0 and j != (down - 1)):
+            self.direction = 'left'
+        elif (i == (across - 1) and j != 0 and j != (down - 1)):
+            self.direction = 'right'
+        elif (j == 0 and i != 0 and i != (across - 1)):
+            self.direction = 'up'
+        elif (j == (down - 1) and i != 0 and i != (across - 1)):
+            self.direction = 'down'
+        else:
+            self.direction = False
+
+
+class Button:
+
+    def __init__(self, label, color, coordinates, callback):
+        x = coordinates['x']
+        y = coordinates['y']
+        self.area = Rectangle(Point(x[0], y[0]), Point(x[1], y[1]))
+        self.text = Text(Point((x[0] + x[1])/2, (y[0] + y[1])/2), label)
+        self.fill(color)
+        self.callback = callback
+
+    def fill(self, color):
+        self.area.setFill(color)
+        return self
+
+    def draw(self, win):
+        self.area.draw(win)
+        self.text.draw(win)
+        return self
+
+    def clear(self):
+        self.area.undraw()
+        self.text.undraw()
+        return self
 
 main()
-
-# lines = [[1, 2], [3, 4]]
-# print('up', order('up', lines))
-# print([[1, 2], [3, 4]])
-# print('down', order('down', lines))
-# print([[4, 3], [2, 1]])
-# print('right', order('right', lines))
-# print([[3, 1], [4, 2]])
-# print('left', order('left', lines))
-# print([[2, 4], [1, 3]])
