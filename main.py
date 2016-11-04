@@ -1,3 +1,7 @@
+# CITS1401 Assignment
+# Ryan White 20528376 and Ziggy O'Reilly
+# https://github.com/RyanWhite04/tiles
+
 from graphics import GraphWin, Point, Rectangle, Text
 from random import random
 
