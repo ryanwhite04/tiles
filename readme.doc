@@ -1,0 +1,28 @@
+For this project, instead of having the computer make automatic moves,
+we decided to allow the player to play the move that the computer would have
+made at any point during any game by clicking a button called "best" for
+the best move.
+
+This allows the player to see what the computer would do at any point in any
+game, and also means they don't have to wait to see successive moves made by
+the computer, which would be slow and annoying, and is not a good approach.
+
+None of the tiles in our game move, since all that is needed is for the numbers
+shown in each tile to update based on the new state of the board. Because of
+this there is no need to change the color of moved tiles, since no tiles move.
+
+We also added in the option to make moves via the directional keys instead of
+clicking on the tiles, since this is normally how games of this nature work.
+
+There are three variables which can be altered by the player, of which any
+change will start a new game. Density is the ratio of squares which initially
+start with a 2, and rows and columns define the dimensions of the game board to
+allow the player to vary the size of the board.
+
+The layout of the game is simple and easy to change, by providing variables to
+overwrite the default variable given to the main function in the program, such
+as the padding between all the ui elements.
+
+The best move doesn't actually perform the best move yet, as we ran out of time,
+it only performs an available move, which allows it to get a reasonable high
+score since it never makes an invalid move and so never gets a point deducted.
